@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mattelek – träna matte varje dag</title>
+<style>
+  :root{
+    --bg:#fff8e7; --card:#ffffff; --ink:#3a3a3a; --accent:#ff8c42;
+    --accent2:#4a90d9; --good:#4caf50; --bad:#e05656; --soft:#f3e9d2;
+  }
+  *{box-sizing:border-box; font-family:"Comic Sans MS","Segoe UI",Verdana,sans-serif;}
+  body{margin:0; background:var(--bg); color:var(--ink); min-height:100vh;
+       display:flex; flex-direction:column; align-items:center; padding:16px;}
+  h1{font-size:2rem; color:var(--accent); margin:8px 0;}
+  h2{font-size:1.3rem; margin:8px 0;}
+  .card{background:var(--card); border-radius:16px; box-shadow:0 4px 12px rgba(0,0,0,.08);
+        padding:20px; max-width:560px; width:100%; margin:8px 0;}
+  button{cursor:pointer; border:none; border-radius:12px; padding:12px 18px; font-size:1.05rem;
+         background:var(--accent); color:#fff; margin:6px 4px; transition:transform .08s;}
+  button:hover{transform:scale(1.04);}
+  button.secondary{background:var(--accent2);}
+  button.ghost{background:var(--soft); color:var(--ink);}
+  button:disabled{opacity:.5; cursor:default; transform:none;}
+  input[type=text],input[type=number],textarea{width:100%; max-width:260px; padding:12px; font-size:1.3rem;
+        border:2px solid var(--soft); border-radius:12px; margin:8px 0; text-align:center;}
+  textarea{text-align:left; font-size:1rem; min-height:90px;}
+  .row{display:flex; flex-wrap:wrap; gap:6px; align-items:center; justify-content:center;}
+  .problem{font-size:2.2rem; text-align:center; margin:14px 0; letter-spacing:2px;}
+  .feedback{text-align:center; font-size:1.2rem; min-height:1.6em; margin:8px 0; font-weight:bold;}
+  .good{color:var(--good);} .bad{color:var(--bad);}
+  .stars{font-size:1.4rem; text-align:center; letter-spacing:4px;}
+  .hint{background:var(--soft); border-radius:12px; padding:10px 14px; margin:8px 0; font-size:1rem;}
+  .hidden{display:none;}
+  .chip{display:inline-block; background:var(--soft); border-radius:20px; padding:6px 14px;
+        margin:4px; cursor:pointer; border:2px solid transparent;}
+  .chip.selected{background:var(--accent); color:#fff;}
+  .bar{height:14px; background:var(--soft); border-radius:8px; overflow:hidden; margin:6px 0;}
+  .bar > div{height:100%; background:var(--good); width:0%; transition:width .3s;}
+  label{font-size:1rem;}
+  .small{font-size:.9rem; color:#777; text-align:center;}
+  .explain-box{border:2px dashed var(--accent2); border-radius:12px; padding:12px; margin-top:10px;}
+</style>
+</head>
+<body>
+
+<h1>🌟 Mattelek 🌟</h1>
+<div class="stars" id="globalStars"></div>
+
+<!-- STARTSIDA -->
+<div class="card" id="home">
+  <h2 style="text-align:center">Vad vill du träna idag?</h2>
+  <div class="row">
+    <button onclick="go('mental')">🧠 Huvudräkning</button>
+    <button onclick="go('strategy')">💡 Strategier</button>
+    <button onclick="go('tables')">✖️ Tabellerna</button>
+    <button onclick="go('tasks')">📝 Uppgifter</button>
+    <button onclick="go('place')">🔢 Tals uppbyggnad</button>
+    <button onclick="go('explain')">🗣️ Förklara ditt svar</button>
+  </div>
+  <p class="small">Spara ditt namn så sparas dina stjärnor i den här webbläsaren.</p>
+  <div class="row"><input type="text" id="childName" placeholder="Ditt namn" style="max-width:200px"></div>
+</div>
+
+<!-- HUVUDRÄKNING -->
+<div class="card hidden" id="mental">
+  <h2>🧠 Huvudräkning</h2>
+  <div id="mentalSetup">
+    <p>Välj räknesätt och svårighet:</p>
+    <div class="row" id="opChips">
+      <span class="chip selected" data-op="+">+</span>
+      <span class="chip" data-op="-">−</span>
+      <span class="chip" data-op="×">×</span>
+      <span class="chip" data-op="÷">÷</span>
+    </div>
+    <div class="row" id="lvlChips">
+      <span class="chip selected" data-lvl="10">inom 10</span>
+      <span class="chip" data-lvl="20">inom 20</span>
+      <span class="chip" data-lvl="100">inom 100</span>
+    </div>
+    <div class="row"><button onclick="startMental()">Starta ▶</button></div>
+  </div>
+  <div id="mentalGame" class="hidden">
+    <div class="problem" id="mentalProblem"></div>
+    <div class="row"><input type="text" inputmode="numeric" id="mentalAnswer" placeholder="?"></div>
+    <div class="row"><button onclick="checkMental()">Svara</button>
+      <button class="ghost" onclick="skipMental()">Hoppa över</button></div>
+    <div class="feedback" id="mentalFeedback"></div>
+    <div class="row"><span id="mentalStreak"></span></div>
+    <div class="row"><button class="secondary" onclick="go('home')">⬅ Tillbaka</button></div>
+  </div>
+</div>
+
+<!-- STRATEGIER -->
+<div class="card hidden" id="strategy">
+  <h2>💡 Vilken strategi passar?</h2>
+  <div id="strategyGame">
+    <p>Titta på uppgiften och välj en strategi du vill prova:</p>
+    <div class="problem" id="stratProblem"></div>
+    <div id="stratOptions"></div>
+    <div class="feedback" id="stratFeedback"></div>
+    <div class="hint hidden" id="stratHint"></div>
+    <div class="row"><button onclick="newStrategy()">Ny uppgift 🔄</button>
+      <button class="secondary" onclick="go('home')">⬅ Tillbaka</button></div>
+  </div>
+</div>
+
+<!-- TABELLER -->
+<div class="card hidden" id="tables">
+  <h2>✖️ Multiplikationstabellerna</h2>
+  <div id="tableSetup">
+    <p>Välj vilka tabeller du vill öva:</p>
+    <div class="row" id="tableChips"></div>
+    <div class="row"><button onclick="startTables()">Starta ▶</button>
+      <button class="ghost" onclick="go('home')">⬅ Tillbaka</button></div>
+    <h2 style="margin-top:16px"> Dina framsteg per tabell</h2>
+    <div id="tableProgress"></div>
+  </div>
+  <div id="tableGame" class="hidden">
+    <div class="problem" id="tableProblem"></div>
+    <div class="row"><input type="text" inputmode="numeric" id="tableAnswer" placeholder="?"></div>
+    <div class="row"><button onclick="checkTable()">Svara</button></div>
+    <div class="feedback" id="tableFeedback"></div>
+    <div class="row"><button class="secondary" onclick="go('home')">⬅ Tillbaka</button></div>
+  </div>
+</div>
+
+<!-- UPPGIFTER (rutin + text) -->
+<div class="card hidden" id="tasks">
+  <h2>📝 Uppgifter</h2>
+  <div id="taskGame">
+    <div class="row">
+      <span class="chip selected" data-kind="routine">Rutinuppgift</span>
+      <span class="chip" data-kind="word">Textuppgift</span>
+    </div>
+    <div class="problem" id="taskProblem" style="font-size:1.5rem; letter-spacing:0; text-align:left;"></div>
+    <div class="row"><input type="text" inputmode="numeric" id="taskAnswer" placeholder="?"></div>
+    <div class="row"><button onclick="checkTask()">Svara</button>
+      <button class="ghost" onclick="newTask()">Nästa 🔄</button></div>
+    <div class="feedback" id="taskFeedback"></div>
+    <div class="row"><button class="secondary" onclick="go('home')">⬅ Tillbaka</button></div>
+  </div>
+</div>
+
+<!-- POSITIONSSYSTEMET -->
+<div class="card hidden" id="place">
+  <h2>🔢 Hur är tal uppbyggda?</h2>
+  <div id="placeGame">
+    <p id="placePrompt"></p>
+    <div class="row"><input type="text" inputmode="numeric" id="placeAnswer" placeholder="?"></div>
+    <div class="row"><button onclick="checkPlace()">Svara</button></div>
+    <div class="feedback" id="placeFeedback"></div>
+    <div class="hint" id="placeHint">Tips: ental står längst till höger, sedan tiotal, sedan hundratal.</div>
+    <div class="row"><button class="ghost" onclick="newPlace()">Nästa 🔄</button>
+      <button class="secondary" onclick="go('home')">⬅ Tillbaka</button></div>
+  </div>
+</div>
+
+<!-- FÖRKLARA -->
+<div class="card hidden" id="explain">
+  <h2>🗣️ Visa och förklara hur du tänker</h2>
+  <div class="problem" id="explainProblem"></div>
+  <p>Skriv eller säg högt: <b>Hur kom du fram till svaret?</b> Vilken strategi använde du?</p>
+  <textarea id="explainText" placeholder="T.ex. ”Jag delade upp 24 i 20 och 4 …”"></textarea>
+  <div class="explain-box hidden" id="explainExample"></div>
+  <div class="row">
+    <button onclick="saveExplanation()">Spara min förklaring ⭐</button>
+    <button class="ghost" onclick="newExplain()">Ny uppgift 🔄</button>
+    <button class="secondary" onclick="go('home')">⬅ Tillbaka</button>
+  </div>
+  <div class="feedback" id="explainFeedback"></div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const rand = (a,b) => Math.floor(Math.random()*(b-a+1))+a;
+let state = JSON.parse(localStorage.getItem('mattelek') || '{"stars":0,"tables":{},"explains":[]}');
+const save = () => localStorage.setItem('mattelek', JSON.stringify(state));
+function addStars(n){ state.stars += n; save(); renderStars(); }
+function renderStars(){ $('globalStars').textContent = '⭐'.repeat(Math.min(state.stars,30)) + (state.stars>30 ? ' +'+(state.stars-30) : ''); }
+
+function go(id){
+  ['home','mental','strategy','tables','tasks','place','explain'].forEach(v => $(v).classList.toggle('hidden', v!==id));
+  if(id==='tables') renderTableProgress();
+  if(id==='strategy') newStrategy();
+  if(id==='tasks') newTask();
+  if(id==='place') newPlace();
+  if(id==='explain') newExplain();
+}
+
+/* ---------- Huvudräkning ---------- */
+let mental = {op:'+', lvl:10, a:0, b:0, streak:0};
+document.querySelectorAll('#opChips .chip').forEach(c => c.onclick = () => {
+  document.querySelectorAll('#opChips .chip').forEach(x=>x.classList.remove('selected'));
+  c.classList.add('selected'); mental.op = c.dataset.op;
+});
+document.querySelectorAll('#lvlChips .chip').forEach(c => c.onclick = () => {
+  document.querySelectorAll('#lvlChips .chip').forEach(x=>x.classList.remove('selected'));
+  c.classList.add('selected'); mental.lvl = +c.dataset.lvl;
+});
+function makeMental(){
+  let a,b;
+  if(mental.op==='+'){ a=rand(1,mental.lvl); b=rand(1,mental.lvl); }
+  else if(mental.op==='-'){ a=rand(1,mental.lvl); b=rand(1,a); }
+  else if(mental.op==='×'){ a=rand(1,Math.min(10,mental.lvl)); b=rand(1,Math.min(10,mental.lvl)); }
+  else { b=rand(2,Math.min(10,mental.lvl)); a=b*rand(1,Math.floor(mental.lvl/b)||1); }
+  mental.a=a; mental.b=b;
+  $('mentalProblem').textContent = `${a} ${mental.op} ${b} = ?`;
+}
+function startMental(){ $('mentalSetup').classList.add('hidden'); $('mentalGame').classList.remove('hidden'); mental.streak=0; makeMental(); $('mentalAnswer').value=''; $('mentalAnswer').focus(); }
+function mentalCorrect(){ return mental.op==='+' ? mental.a+mental.b : mental.op==='-' ? mental.a-mental.b : mental.op==='×' ? mental.a*mental.b : mental.a/mental.b; }
+function checkMental(){
+  const v = parseInt($('mentalAnswer').value,10);
+  const f = $('mentalFeedback');
+  if(v === mentalCorrect()){ mental.streak++; addStars(1); f.className='feedback good'; f.textContent=['Rätt! 🎉','Snyggt! 🌟','Yes! Du är grym! 💪'][rand(0,2)]; }
+  else { mental.streak=0; f.className='feedback bad'; f.textContent=`Inte riktigt – svaret är ${mentalCorrect()}. Försök igen på nästa!`; }
+  $('mentalStreak').textContent = '🔥 Kedja: ' + mental.streak;
+  makeMental(); $('mentalAnswer').value=''; $('mentalAnswer').focus();
+}
+function skipMental(){ mental.streak=0; $('mentalStreak').textContent=''; makeMental(); $('mentalAnswer').value=''; }
+
+/* ---------- Strategier ---------- */
+const strategies = [
+  {make:()=>{const a=rand(11,99),b=rand(11,99); return {q:`${a} + ${b} = ?`, ans:a+b,
+    opts:['Dela upp i tior och ental', 'Räkna vidare från det största talet', 'Gör om till nästan 100']}}},
+  {make:()=>{const a=rand(11,50),b=rand(2,9); return {q:`${a} − ${b} = ?`, ans:a-b,
+    opts:['Ta bort ental i taget', 'Räkna upp från subtrahenden', 'Dela upp i tior och ental']}}},
+  {make:()=>{const b=rand(2,9),a=rand(2,9); return {q:`${a} × ${b} = ?`, ans:a*b,
+    opts:['Använd dubbelt och hälften', 'Räkna grupper högt', 'Hoppa på tallinjen']}}},
+  {make:()=>{const b=rand(2,9),a=b*rand(2,9); return {q:`${a} ÷ ${b} = ?`, ans:a/b,
+    opts:['Dela i lika stora grupper', 'Tänk baklänges: vad gånger b blir a?', 'Rita streck och dela ut']}}}
+];
+const strategyTips = {
+  'Dela upp i tior och ental':'Ex: 24 + 15 = (20+10) + (4+5) = 30 + 9 = 39',
+  'Räkna vidare från det största talet':'Ex: 24 + 15 – börja på 24 och räkna 15 steg uppåt',
+  'Gör om till nästan 100':'Ex: 58 + 24 – tänk 60 + 24 = 84, dra bort 2',
+  'Ta bort ental i taget':'Ex: 43 − 7 – ta bort 3 för att nå 40, sedan 4 till',
+  'Räkna upp från subtrahenden':'Ex: 43 − 37 – hur många steg från 37 till 43?',
+  'Använd dubbelt och hälften':'Ex: 6 × 4 = 12 × 2 = 24',
+  'Räkna grupper högt':'Ex: 3 × 4 är 4 + 4 + 4',
+  'Hoppa på tallinjen':'Rita en tallinje och hoppa b-storlekar a gånger',
+  'Dela i lika stora grupper':'Ex: 24 ÷ 4 – dela 24 kulor i 4 lika grupper',
+  'Tänk baklänges: vad gånger b blir a?':'Ex: 24 ÷ 4 – 4 × ? = 24',
+  'Rita streck och dela ut':'Rita 24 streck och fördela dem i b grupper'
+};
+let strat = null;
+function newStrategy(){
+  const s = strategies[rand(0,strategies.length-1)].make();
+  strat = s;
+  $('stratProblem').textContent = s.q;
+  $('stratFeedback').textContent=''; $('stratHint').classList.add('hidden');
+  const box = $('stratOptions'); box.innerHTML='';
+  s.opts.forEach(o => {
+    const b = document.createElement('button'); b.className='ghost'; b.textContent=o;
+    b.onclick = () => { $('stratHint').textContent = strategyTips[o] || ''; $('stratHint').classList.remove('hidden');
+      $('stratFeedback').className='feedback good';
+      $('stratFeedback').textContent = `Svaret är ${s.ans}. Bra strategi! 👏`; addStars(1); };
+    box.appendChild(b);
+  });
+}
+
+/* ---------- Tabeller ---------- */
+let tableSel = new Set([2,3,5,10]);
+for(let i=1;i<=10;i++){
+  const c = document.createElement('span'); c.className='chip'+(tableSel.has(i)?' selected':''); c.textContent=i+'-gångan';
+  c.onclick = () => { tableSel.has(i) ? tableSel.delete(i) : tableSel.add(i); c.classList.toggle('selected'); };
+  $('tableChips').appendChild(c);
+}
+function renderTableProgress(){
+  const box = $('tableProgress'); box.innerHTML='';
+  for(let i=1;i<=10;i++){
+    const p = state.tables[i]||{ok:0,total:0};
+    const pct = p.total ? Math.round(100*p.ok/p.total) : 0;
+    box.innerHTML += `<label>${i}-gångan</label><div class="bar"><div style="width:${pct}%"></div></div>`;
+  }
+}
+let tab = {a:0,b:0};
+function startTables(){
+  if(tableSel.size===0){ alert('Välj minst en tabell!'); return; }
+  $('tableSetup').classList.add('hidden'); $('tableGame').classList.remove('hidden'); newTable();
+}
+function newTable(){
+  const arr=[...tableSel]; const b=arr[rand(0,arr.length-1)];
+  tab={a:rand(1,10),b}; $('tableProblem').textContent=`${tab.a} × ${b} = ?`;
+  $('tableAnswer').value=''; $('tableAnswer').focus();
+}
+function checkTable(){
+  const v = parseInt($('tableAnswer').value,10); const f=$('tableFeedback');
+  const rec = state.tables[tab.b]||(state.tables[tab.b]={ok:0,total:0});
+  rec.total++;
+  if(v===tab.a*tab.b){ rec.ok++; addStars(1); f.className='feedback good'; f.textContent='Rätt! 🌟'; }
+  else { f.className='feedback bad'; f.textContent=`Svaret är ${tab.a*tab.b}. Öva igen!`; }
+  save(); newTable();
+}
+
+/* ---------- Uppgifter ---------- */
+let taskKind='routine', task={ans:0};
+const wordProblems = [
+  () => { const a=rand(5,40), b=rand(3,a); return {t:`Sara har ${a} kulor och ger bort ${b}. Hur många har hon kvar?`, ans:a-b}; },
+  () => { const a=rand(2,6), b=rand(3,9), c=a*b; return {t:`En påse kostar ${b} kr. Köper ${a} påsar. Vad kostar det tillsammans?`, ans:c}; },
+  () => { const g=rand(2,5), e=rand(4,9); return {t:`${g} kompisar ska dela lika på ${g*e} godisar. Hur många får var och en?`, ans:e}; },
+  () => { const a=rand(10,60), b=rand(5,20); return {t:`En buss åker ${a} km på morgonen och ${b} km på eftermiddagen. Hur långt åker den totalt?`, ans:a+b}; },
+  () => { const a=rand(3,8), b=rand(2,a-1); return {t:`Pappa är ${a*10} år. Mamma är ${b*10} år. Hur mycket äldre är pappa?`, ans:(a-b)*10}; },
+  () => { const e=rand(2,7), t=rand(3,9); return {t:`Varje dag läser Li ${e} sidor i ${t} dagar. Hur många sidor blir det?`, ans:e*t}; }
+];
+document.querySelectorAll('#tasks .chip').forEach(c => c.onclick = () => {
+  document.querySelectorAll('#tasks .chip').forEach(x=>x.classList.remove('selected'));
+  c.classList.add('selected'); taskKind=c.dataset.kind; newTask();
+});
+function newTask(){
+  if(taskKind==='word'){ const w=wordProblems[rand(0,wordProblems.length-1)](); task=w; $('taskProblem').textContent=w.t; }
+  else { const ops=['+','-','×','÷']; const op=ops[rand(0,3)];
+    let a,b,ans;
+    if(op==='+'){a=rand(10,99);b=rand(10,99);ans=a+b;}
+    else if(op==='-'){a=rand(20,99);b=rand(5,a-5);ans=a-b;}
+    else if(op==='×'){a=rand(2,9);b=rand(2,9);ans=a*b;}
+    else {b=rand(2,9);a=b*rand(2,9);ans=a/b;}
+    task={t:`${a} ${op} ${b} = ?`, ans}; $('taskProblem').textContent=task.t; }
+  $('taskAnswer').value=''; $('taskAnswer').focus(); $('taskFeedback').textContent='';
+}
+function checkTask(){
+  const v=parseInt($('taskAnswer').value,10); const f=$('taskFeedback');
+  if(v===task.ans){ addStars(2); f.className='feedback good'; f.textContent='Helt rätt! 🌟🌟'; }
+  else { f.className='feedback bad'; f.textContent=`Inte riktigt – svaret är ${task.ans}.`; }
+}
+
+/* ---------- Positionssystemet ---------- */
+let place={ans:0};
+function newPlace(){
+  const h=rand(0,9), t=rand(0,9), e=rand(0,9);
+  if(Math.random()<0.5){
+    place={ans:h*100+t*10+e};
+    $('placePrompt').textContent=`Bygg talet: ${h} hundratal, ${t} tiotal, ${e} ental. Skriv talet!`;
+  } else {
+    const n = h*100+t*10+e;
+    place={ans: [e,t,h][rand(0,2)]};
+    $('placePrompt').textContent=`I talet ${n} – vilken siffra står på ${['ental','tiotal','hundratal'][[e,t,h].indexOf(place.ans)]}s plats?`;
+  }
+  $('placeAnswer').value=''; $('placeAnswer').focus(); $('placeFeedback').textContent='';
+}
+function checkPlace(){
+  const v=parseInt($('placeAnswer').value,10); const f=$('placeFeedback');
+  if(v===place.ans){ addStars(1); f.className='feedback good'; f.textContent='Rätt! 🎉'; }
+  else { f.className='feedback bad'; f.textContent=`Inte riktigt – svaret är ${place.ans}.`; }
+}
+
+/* ---------- Förklara ---------- */
+let explain={ans:0};
+const explainExamples = [
+  'Exempel: ”24 + 15. Jag delade upp talen: 20 + 10 = 30 och 4 + 5 = 9. 30 + 9 = 39.”',
+  'Exempel: ”8 × 5. Jag tänkte dubbelt: 4 × 5 = 20, så 8 × 5 = 40.”',
+  'Exempel: ”Jag ritade 24 streck och delade i 4 grupper. Det blev 6 i varje.”'
+];
+function newExplain(){
+  const a=rand(11,99), b=rand(11,99);
+  const op = Math.random()<0.5 ? '+' : '−';
+  explain = op==='+' ? {q:`${a} + ${b} = ?`, ans:a+b} : {q:`${a} − ${b} = ?`, ans:a-b};
+  $('explainProblem').textContent = explain.q;
+  $('explainExample').classList.remove('hidden');
+  $('explainExample').textContent = explainExamples[rand(0,explainExamples.length-1)];
+  $('explainText').value=''; $('explainFeedback').textContent='';
+}
+function saveExplanation(){
+  const txt = $('explainText').value.trim();
+  const f=$('explainFeedback');
+  if(txt.length < 5){ f.className='feedback bad'; f.textContent='Skriv minst en liten förklaring först 🙂'; return; }
+  state.explains.push({q:explain.q, text:txt, when:new Date().toLocaleDateString('sv-SE')});
+  addStars(3); save();
+  f.className='feedback good';
+  f.textContent=`Bra förklarat! ⭐⭐⭐ Svaret ${explain.ans} stämmer också!`;
+}
+
+$('childName').value = state.name || '';
+$('childName').onchange = e => { state.name = e.target.value; save(); };
+renderStars();
+</script>
+</body>
+</html>
