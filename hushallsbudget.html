@@ -78,8 +78,10 @@
   <div class="row">
     <input type="month" id="monthPicker">
     <button onclick="saveMonth()">💾 Spara månaden</button>
+    <button class="secondary" onclick="exportCSV()">📊 Exportera (.csv)</button>
   </div>
-  <p class="small">Sparar en ögonblicksbild av inkomster och räkningar för vald månad, så du kan jämföra månader över tid.</p>
+  <p class="small">Sparar en ögonblicksbild av inkomster och räkningar för vald månad, så du kan jämföra månader över tid.
+  Exporterad .csv-fil öppnas i Excel, LibreOffice Calc eller Google Kalkylark.</p>
   <div id="history"></div>
 </div>
 
@@ -272,6 +274,56 @@ function renderHistory(){
           hist.map(h => '<td>' + fmt(h.bills.reduce((s, b) => s + b.amount, 0)) + '</td>').join('') +
           '<td></td></tr></table>';
   el.innerHTML = html;
+}
+
+function csvCell(v){
+  const s = String(v);
+  return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+function csvNum(n){
+  return n.toFixed(2).replace('.', ',');
+}
+function exportCSV(){
+  const r = compute();
+  const n1 = state.n1 || 'Person 1', n2 = state.n2 || 'Person 2';
+  const rows = [];
+  const line = arr => rows.push(arr.map(csvCell).join(';'));
+  line(['Hushållsbudget – exporterad ' + new Date().toLocaleDateString('sv-SE')]);
+  rows.push('');
+  line(['Aktuell fördelning']);
+  line(['', n1, n2]);
+  line(['Inkomst (kr)', csvNum(r.i1), csvNum(r.i2)]);
+  line(['Egna räkningar (kr)', csvNum(-r.o1), csvNum(-r.o2)]);
+  line(['Andel gemensamma (kr)', csvNum(-r.s1), csvNum(-r.s2)]);
+  line(['Kvar, lika för båda (kr)', csvNum(r.left), csvNum(r.left)]);
+  rows.push('');
+  line(['Räkningar – aktuell månad']);
+  line(['Räkning', 'Belopp (kr)', 'Delning']);
+  state.bills.forEach(b => {
+    if(b.name.trim() === '' && parseNum(b.amount) <= 0) return;
+    line([b.name.trim() || 'Okänd räkning', csvNum(parseNum(b.amount)), splitLabel(b.split)]);
+  });
+  const hist = [...state.history].sort((a, b) => a.month.localeCompare(b.month));
+  if(hist.length){
+    rows.push('');
+    line(['Historik – utgifter per månad']);
+    line(['Räkning'].concat(hist.map(h => monthLabel(h.month)), ['Senaste']));
+    const names = [];
+    hist.forEach(h => h.bills.forEach(b => { if(!names.includes(b.name)) names.push(b.name); }));
+    names.forEach(n => {
+      const cells = hist.map(h => { const b = h.bills.find(x => x.name === n); return b ? csvNum(b.amount) : ''; });
+      const last = [...hist].reverse().find(h => h.bills.some(x => x.name === n));
+      cells.push(last ? csvNum(last.bills.find(x => x.name === n).amount) : '');
+      line([n].concat(cells));
+    });
+    line(['Totalt (kr)'].concat(hist.map(h => csvNum(h.bills.reduce((s, b) => s + b.amount, 0))), ['']));
+  }
+  const blob = new Blob(['\ufeff' + rows.join('\r\n')], {type: 'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'hushallsbudget-' + new Date().toISOString().slice(0, 10) + '.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
 $('n1').value = state.n1 || '';
