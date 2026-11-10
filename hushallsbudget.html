@@ -79,9 +79,13 @@
     <input type="month" id="monthPicker">
     <button onclick="saveMonth()">💾 Spara månaden</button>
     <button class="secondary" onclick="exportCSV()">📊 Exportera (.csv)</button>
+    <button class="ghost" onclick="exportJSON()">💾 Backup (.json)</button>
+    <button class="ghost" onclick="$('importFile').click()">📥 Importera</button>
+    <input type="file" id="importFile" accept=".json,application/json" style="display:none" onchange="importJSON(event)">
   </div>
   <p class="small">Sparar en ögonblicksbild av inkomster och räkningar för vald månad, så du kan jämföra månader över tid.
-  Exporterad .csv-fil öppnas i Excel, LibreOffice Calc eller Google Kalkylark.</p>
+  .csv-filen öppnas i Excel, LibreOffice Calc eller Google Kalkylark. .json-backupen sparar ALLT (även historiken)
+  och kan importeras igen – t.ex. efter rensad webbhistorik eller i en annan webbläsare.</p>
   <div id="history"></div>
 </div>
 
@@ -324,6 +328,38 @@ function exportCSV(){
   a.download = 'hushallsbudget-' + new Date().toISOString().slice(0, 10) + '.csv';
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+function exportJSON(){
+  const blob = new Blob([JSON.stringify(state, null, 2)], {type: 'application/json;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'hushallsbudget-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+function importJSON(ev){
+  const file = ev.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result);
+      if(!data || !Array.isArray(data.bills)) throw new Error('Ogiltig fil');
+      if(!confirm('Importera backup "' + file.name + '"? Nuvarande data i webbläsaren skrivs över.')) { ev.target.value = ''; return; }
+      state = Object.assign(defaultState(), data);
+      if(!Array.isArray(state.history)) state.history = [];
+      if(!state.bills.length) state.bills = [{name:'', amount:'', split:'equal'}];
+      save();
+      $('n1').value = state.n1 || ''; $('n2').value = state.n2 || '';
+      $('i1').value = state.i1 || ''; $('i2').value = state.i2 || '';
+      renderBills(); recalc(); renderHistory();
+    } catch(e){
+      alert('Kunde inte läsa filen – är det en giltig backup (.json) från appen?');
+    }
+    ev.target.value = '';
+  };
+  reader.readAsText(file);
 }
 
 $('n1').value = state.n1 || '';
