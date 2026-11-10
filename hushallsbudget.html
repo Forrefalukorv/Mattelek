@@ -22,7 +22,7 @@
   button.secondary{background:var(--accent2);}
   button.ghost{background:var(--soft); color:var(--ink);}
   button.small{padding:6px 12px; font-size:.95rem;}
-  input[type=text],select{padding:10px; font-size:1.05rem; border:2px solid var(--soft);
+  input[type=text],input[type=month],select{padding:10px; font-size:1.05rem; border:2px solid var(--soft);
         border-radius:12px; margin:4px; background:#fff; color:var(--ink);}
   input.name{max-width:160px;}
   input.amount{max-width:140px; text-align:right;}
@@ -73,6 +73,16 @@
   <div id="result"></div>
 </div>
 
+<div class="card">
+  <h2>📅 Historik – följ utgifterna månad för månad</h2>
+  <div class="row">
+    <input type="month" id="monthPicker">
+    <button onclick="saveMonth()">💾 Spara månaden</button>
+  </div>
+  <p class="small">Sparar en ögonblicksbild av inkomster och räkningar för vald månad, så du kan jämföra månader över tid.</p>
+  <div id="history"></div>
+</div>
+
 <script>
 const $ = id => document.getElementById(id);
 const KEY = 'hushallsbudget';
@@ -84,6 +94,7 @@ try { state = JSON.parse(localStorage.getItem(KEY)) || defaultState(); }
 catch(e){ state = defaultState(); }
 if(!Array.isArray(state.bills) || !state.bills.length)
   state.bills = [{name:'', amount:'', split:'equal'}];
+if(!Array.isArray(state.history)) state.history = [];
 const save = () => localStorage.setItem(KEY, JSON.stringify(state));
 
 const parseNum = v => {
@@ -205,10 +216,70 @@ function recalc(){
   el.innerHTML = html;
 }
 
+function monthLabel(key){
+  const parts = key.split('-').map(Number);
+  const s = new Date(parts[0], parts[1]-1, 1).toLocaleDateString('sv-SE', {month:'long', year:'numeric'});
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+function saveMonth(){
+  const key = $('monthPicker').value;
+  if(!key){ alert('Välj en månad först!'); return; }
+  const bills = state.bills
+    .filter(b => b.name.trim() !== '' || parseNum(b.amount) > 0)
+    .map(b => ({name: b.name.trim() || 'Okänd räkning', amount: parseNum(b.amount), split: b.split}));
+  if(!bills.length){ alert('Lägg till minst en räkning innan du sparar månaden!'); return; }
+  const existing = state.history.findIndex(h => h.month === key);
+  if(existing >= 0 && !confirm(monthLabel(key) + ' är redan sparad. Skriva över den?')) return;
+  const snap = {month: key, i1: parseNum(state.i1), i2: parseNum(state.i2), bills};
+  if(existing >= 0) state.history[existing] = snap; else state.history.unshift(snap);
+  save(); renderHistory();
+}
+function deleteMonth(i){
+  if(!confirm('Ta bort ' + monthLabel(state.history[i].month) + '?')) return;
+  state.history.splice(i, 1); save(); renderHistory();
+}
+function renderHistory(){
+  const el = $('history');
+  const hist = [...state.history].sort((a, b) => a.month.localeCompare(b.month));
+  if(!hist.length){
+    el.innerHTML = '<p class="hint">Inga sparade månader än – spara din första månad ovan! 📈</p>';
+    return;
+  }
+  let html = '<h2 style="margin-top:14px">Sparade månader</h2><table><tr><th>Månad</th><th>Totalt</th><th>Gemensamt</th><th></th></tr>';
+  hist.forEach(h => {
+    const tot = h.bills.reduce((s, b) => s + b.amount, 0);
+    const eq = h.bills.filter(b => b.split === 'equal').reduce((s, b) => s + b.amount, 0);
+    const i = state.history.indexOf(h);
+    html += '<tr><td>' + monthLabel(h.month) + '</td><td>' + fmt(tot) + '</td><td>' + fmt(eq) + '</td>' +
+            '<td><button class="ghost small" onclick="deleteMonth(' + i + ')">🗑</button></td></tr>';
+  });
+  html += '</table>';
+
+  const names = [];
+  hist.forEach(h => h.bills.forEach(b => { if(!names.includes(b.name)) names.push(b.name); }));
+  html += '<h2 style="margin-top:14px">Utgifter per månad</h2>';
+  html += '<table><tr><th>Räkning</th>' + hist.map(h => '<th>' + monthLabel(h.month) + '</th>').join('') + '<th>Senaste</th></tr>';
+  names.forEach(n => {
+    html += '<tr><td>' + esc(n) + '</td>';
+    hist.forEach(h => {
+      const b = h.bills.find(x => x.name === n);
+      html += '<td>' + (b ? fmt(b.amount) : '–') + '</td>';
+    });
+    const last = [...hist].reverse().find(h => h.bills.some(x => x.name === n));
+    html += '<td><b>' + (last ? fmt(last.bills.find(x => x.name === n).amount) : '–') + '</b></td></tr>';
+  });
+  html += '<tr class="total-row"><td>Totalt</td>' +
+          hist.map(h => '<td>' + fmt(h.bills.reduce((s, b) => s + b.amount, 0)) + '</td>').join('') +
+          '<td></td></tr></table>';
+  el.innerHTML = html;
+}
+
 $('n1').value = state.n1 || '';
 $('n2').value = state.n2 || '';
 $('i1').value = state.i1 || '';
 $('i2').value = state.i2 || '';
+const now = new Date();
+$('monthPicker').value = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
 $('n1').oninput = e => { state.n1 = e.target.value; save(); renderBills(); recalc(); };
 $('n2').oninput = e => { state.n2 = e.target.value; save(); renderBills(); recalc(); };
 $('i1').oninput = e => { state.i1 = e.target.value; save(); recalc(); };
@@ -216,6 +287,7 @@ $('i2').oninput = e => { state.i2 = e.target.value; save(); recalc(); };
 
 renderBills();
 recalc();
+renderHistory();
 </script>
 </body>
 </html>
