@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hushållsbudget – dela räkningarna rättvist</title>
+<style>
+  :root{
+    --bg:#fff8e7; --card:#ffffff; --ink:#3a3a3a; --accent:#ff8c42;
+    --accent2:#4a90d9; --good:#4caf50; --bad:#e05656; --soft:#f3e9d2;
+  }
+  *{box-sizing:border-box; font-family:"Comic Sans MS","Segoe UI",Verdana,sans-serif;}
+  body{margin:0; background:var(--bg); color:var(--ink); min-height:100vh;
+       display:flex; flex-direction:column; align-items:center; padding:16px;}
+  h1{font-size:2rem; color:var(--accent); margin:8px 0;}
+  h2{font-size:1.3rem; margin:8px 0;}
+  .card{background:var(--card); border-radius:16px; box-shadow:0 4px 12px rgba(0,0,0,.08);
+        padding:20px; max-width:640px; width:100%; margin:8px 0;}
+  button{cursor:pointer; border:none; border-radius:12px; padding:12px 18px; font-size:1.05rem;
+         background:var(--accent); color:#fff; margin:6px 4px; transition:transform .08s;}
+  button:hover{transform:scale(1.04);}
+  button.secondary{background:var(--accent2);}
+  button.ghost{background:var(--soft); color:var(--ink);}
+  button.small{padding:6px 12px; font-size:.95rem;}
+  input[type=text],select{padding:10px; font-size:1.05rem; border:2px solid var(--soft);
+        border-radius:12px; margin:4px; background:#fff; color:var(--ink);}
+  input.name{max-width:160px;}
+  input.amount{max-width:140px; text-align:right;}
+  input.billname{flex:1; min-width:120px;}
+  .row{display:flex; flex-wrap:wrap; gap:6px; align-items:center;}
+  .bill{display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding:8px;
+        background:var(--soft); border-radius:12px; margin:6px 0;}
+  table{width:100%; border-collapse:collapse; margin:10px 0; font-size:1.05rem;}
+  th,td{padding:8px 10px; text-align:right; border-bottom:1px solid var(--soft);}
+  th:first-child,td:first-child{text-align:left;}
+  th{color:#777; font-weight:normal;}
+  .total-row td{font-weight:bold; border-bottom:none; font-size:1.15rem;}
+  .result-big{font-size:1.35rem; text-align:center; margin:12px 0; line-height:1.5;}
+  .good{color:var(--good);} .bad{color:var(--bad);}
+  .hint{background:var(--soft); border-radius:12px; padding:10px 14px; margin:8px 0; font-size:.95rem;}
+  .small{font-size:.9rem; color:#777; text-align:center;}
+</style>
+</head>
+<body>
+
+<h1>💰 Hushållsbudget</h1>
+<p class="small">Fyll i inkomster och räkningar – appen räknar direkt ut vem som ska betala vad så båda har <b>lika mycket kvar</b>. Sparas automatiskt i webbläsaren.</p>
+
+<div class="card">
+  <h2>💵 Inkomster per månad</h2>
+  <div class="row">
+    <input type="text" class="name" id="n1" placeholder="Namn 1">
+    <input type="text" class="amount" id="i1" inputmode="decimal" placeholder="Inkomst (kr)">
+  </div>
+  <div class="row">
+    <input type="text" class="name" id="n2" placeholder="Namn 2">
+    <input type="text" class="amount" id="i2" inputmode="decimal" placeholder="Inkomst (kr)">
+  </div>
+</div>
+
+<div class="card">
+  <h2>🧾 Räkningar per månad</h2>
+  <div id="billRows"></div>
+  <div class="row">
+    <button onclick="addBill()">➕ Lägg till räkning</button>
+    <button class="ghost small" onclick="clearBills()">Rensa alla</button>
+  </div>
+  <p class="small">Räkningar som “delas lika” ingår i den rättvisa fördelningen. Tryck Enter i ett fält för att lägga till nästa räkning.</p>
+</div>
+
+<div class="card">
+  <h2>⚖️ Så här ska ni dela</h2>
+  <div id="result"></div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const KEY = 'hushallsbudget';
+function defaultState(){
+  return { n1:'Du', n2:'Din fru', i1:'', i2:'', bills:[{name:'', amount:'', split:'equal'}] };
+}
+let state;
+try { state = JSON.parse(localStorage.getItem(KEY)) || defaultState(); }
+catch(e){ state = defaultState(); }
+if(!Array.isArray(state.bills) || !state.bills.length)
+  state.bills = [{name:'', amount:'', split:'equal'}];
+const save = () => localStorage.setItem(KEY, JSON.stringify(state));
+
+const parseNum = v => {
+  const n = parseFloat(String(v).replace(/\s/g,'').replace(',', '.'));
+  return isNaN(n) ? 0 : n;
+};
+const fmt = n => new Intl.NumberFormat('sv-SE', {style:'currency', currency:'SEK', maximumFractionDigits:2}).format(n);
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+function splitLabel(s){
+  if(s==='equal') return 'Delas lika';
+  if(s==='p1') return 'Betalas av ' + (state.n1 || 'person 1');
+  return 'Betalas av ' + (state.n2 || 'person 2');
+}
+
+function renderBills(){
+  const box = $('billRows'); box.innerHTML = '';
+  state.bills.forEach((b, idx) => {
+    const row = document.createElement('div'); row.className = 'bill';
+
+    const name = document.createElement('input');
+    name.type = 'text'; name.className = 'billname'; name.placeholder = 'Räkning (t.ex. Hyra)'; name.value = b.name;
+    name.oninput = e => { b.name = e.target.value; save(); recalc(); };
+    name.onkeydown = e => { if(e.key==='Enter'){ e.preventDefault(); addBill(); } };
+
+    const amount = document.createElement('input');
+    amount.type = 'text'; amount.className = 'amount'; amount.inputMode = 'decimal';
+    amount.placeholder = '0 kr'; amount.value = b.amount;
+    amount.oninput = e => { b.amount = e.target.value; save(); recalc(); };
+    amount.onkeydown = e => { if(e.key==='Enter'){ e.preventDefault(); addBill(); } };
+
+    const sel = document.createElement('select');
+    ['equal','p1','p2'].forEach(v => {
+      const o = document.createElement('option');
+      o.value = v; o.textContent = splitLabel(v);
+      if(b.split === v) o.selected = true;
+      sel.appendChild(o);
+    });
+    sel.onchange = e => { b.split = e.target.value; save(); recalc(); };
+
+    const del = document.createElement('button');
+    del.className = 'ghost small'; del.textContent = '🗑'; del.title = 'Ta bort räkning';
+    del.onclick = () => {
+      state.bills.splice(idx, 1);
+      if(!state.bills.length) state.bills.push({name:'', amount:'', split:'equal'});
+      save(); renderBills(); recalc();
+    };
+
+    row.append(name, amount, sel, del);
+    box.appendChild(row);
+  });
+}
+
+function addBill(){
+  state.bills.push({name:'', amount:'', split:'equal'});
+  save(); renderBills(); recalc();
+  const inputs = $('billRows').querySelectorAll('.billname');
+  if(inputs.length) inputs[inputs.length-1].focus();
+}
+function clearBills(){
+  state.bills = [{name:'', amount:'', split:'equal'}];
+  save(); renderBills(); recalc();
+}
+
+function compute(){
+  const i1 = parseNum(state.i1), i2 = parseNum(state.i2);
+  let eq = 0, o1 = 0, o2 = 0;
+  state.bills.forEach(b => {
+    const a = parseNum(b.amount);
+    if(b.split === 'equal') eq += a;
+    else if(b.split === 'p1') o1 += a;
+    else o2 += a;
+  });
+  const a1 = i1 - o1, a2 = i2 - o2;
+  const s1 = (eq + a1 - a2) / 2, s2 = eq - s1;
+  const left = (a1 + a2 - eq) / 2;
+  return { i1, i2, o1, o2, eq, s1, s2, left, total: eq + o1 + o2 };
+}
+
+function shareCell(s){
+  return s < 0 ? '+' + fmt(-s) + ' (får tillbaka)' : '−' + fmt(s);
+}
+
+function recalc(){
+  const r = compute();
+  const n1 = state.n1 || 'Person 1', n2 = state.n2 || 'Person 2';
+  const el = $('result');
+  if(r.i1 <= 0 && r.i2 <= 0 && r.total <= 0){
+    el.innerHTML = '<p class="hint">Fyll i inkomster och lägg till räkningar så räknar appen ut fördelningen åt dig. 👆</p>';
+    return;
+  }
+  let html = '';
+  if(r.left < 0)
+    html += '<p class="bad" style="text-align:center"><b>Varning:</b> räkningarna är högre än inkomsterna tillsammans, så det finns inget kvar att dela.</p>';
+
+  if(r.eq > 0){
+    const p = (name, s) => s < 0
+      ? name + ' får tillbaka ' + fmt(-s)
+      : name + ' betalar ' + fmt(s);
+    html += '<div class="result-big">' + p(n1, r.s1) + ' och ' + p(n2, r.s2) +
+            ' av de gemensamma räkningarna (' + fmt(r.eq) + ' kr).<br>' +
+            'Då har ni båda <b class="good">' + fmt(r.left) + '</b> kvar varje månad. ⚖️</div>';
+
+    const payer = (r.i1 - r.o1) >= (r.i2 - r.o2)
+      ? { name:n1, other:n2, share:r.s2 }
+      : { name:n2, other:n1, share:r.s1 };
+    html += '<p class="hint">💡 Förslag: låt <b>' + esc(payer.name) + '</b> betala alla gemensamma räkningar (' +
+            fmt(r.eq) + ' kr) från sitt konto – då för <b>' + esc(payer.other) + '</b> över <b>' +
+            fmt(Math.max(0, payer.share)) + '</b>.</p>';
+  }
+
+  html += '<table><tr><th></th><th>' + esc(n1) + '</th><th>' + esc(n2) + '</th></tr>' +
+    '<tr><td>Inkomst</td><td>' + fmt(r.i1) + '</td><td>' + fmt(r.i2) + '</td></tr>' +
+    '<tr><td>Egna räkningar</td><td>−' + fmt(r.o1) + '</td><td>−' + fmt(r.o2) + '</td></tr>' +
+    '<tr><td>Andel gemensamma</td><td>' + shareCell(r.s1) + '</td><td>' + shareCell(r.s2) + '</td></tr>' +
+    '<tr class="total-row"><td>Kvar (lika för båda)</td><td colspan="2" style="text-align:center">' + fmt(r.left) + '</td></tr>' +
+    '</table>';
+  html += '<p class="small">Totalt ' + fmt(r.total) + ' kr i räkningar, varav ' + fmt(r.eq) + ' kr gemensamma.</p>';
+  el.innerHTML = html;
+}
+
+$('n1').value = state.n1 || '';
+$('n2').value = state.n2 || '';
+$('i1').value = state.i1 || '';
+$('i2').value = state.i2 || '';
+$('n1').oninput = e => { state.n1 = e.target.value; save(); renderBills(); recalc(); };
+$('n2').oninput = e => { state.n2 = e.target.value; save(); renderBills(); recalc(); };
+$('i1').oninput = e => { state.i1 = e.target.value; save(); recalc(); };
+$('i2').oninput = e => { state.i2 = e.target.value; save(); recalc(); };
+
+renderBills();
+recalc();
+</script>
+</body>
+</html>
